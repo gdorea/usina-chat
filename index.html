@@ -283,8 +283,8 @@
         "Agente da Apresentação",
         "Agente da Orquestração"
       ];
-      // Webhook n8n fornecido (já configurado)
-      const WEBHOOK_URL = "https://webhook.aidorea.com/webhook/eddaa88d-2df3-4f86-ba92-c08e12499160"; // substitua se necessário
+  // Webhook n8n (injetado em build time via __WEBHOOK_URL__ placeholder)
+  const WEBHOOK_URL = "__WEBHOOK_URL__"; // substituído durante build
 
   // Elements
   const agentsEl = document.getElementById('agents');

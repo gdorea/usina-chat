@@ -1,0 +1,33 @@
+name: Publish Cloudflare Worker
+
+on:
+  workflow_dispatch:
+
+jobs:
+  publish-worker:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install Wrangler
+        run: npm install -g wrangler
+
+      - name: Authenticate Wrangler
+        env:
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+        run: |
+          echo "${{ secrets.CF_API_TOKEN }}" | wrangler login --api-token
+
+      - name: Publish worker
+        env:
+          WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
+        run: |
+          # ensure the secret is present in Worker namespace
+          printf "%s" "$WEBHOOK_URL" | wrangler secret put WEBHOOK_URL || true
+          wrangler publish worker

@@ -1,0 +1,13 @@
+name = "usina-chat-proxy"
+main = "worker/index.js"
+compatibility_date = "2025-08-14"
+
+[build]
+command = ""
+
+[vars]
+# WEBHOOK_URL will be set as a secret in Workers environment
+# Use `wrangler secret put WEBHOOK_URL` to add the webhook URL as a secret for the Worker.
+# Do NOT store the real webhook URL in this file.
+# Example (local testing only):
+# WEBHOOK_URL = "https://your-n8n-webhook"
