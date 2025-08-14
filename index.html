@@ -1,0 +1,620 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Chat - Usina Educação</title>
+    <meta name="description" content="Chat minimalista para integrar com n8n - Usina Educação" />
+
+    <!-- Fonte Syne -->
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700&display=swap" rel="stylesheet">
+
+    <!-- Tailwind CDN + custom colors e fonte -->
+    <script>
+      tailwind = {
+        config: {
+          theme: {
+            extend: {
+              colors: {
+                usinaBlue: '#0a4774',
+                usinaOrange: '#dd6400',
+                usinaWhite: '#ffffff'
+              },
+              fontFamily: {
+                syne: ['Syne', 'ui-sans-serif', 'system-ui']
+              }
+            }
+          }
+        }
+      }
+    </script>
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <style>
+      :root{
+        --usina-blue: #0a4774;
+    --usina-orange: #dd6400;
+  /* avatar do usuário: tom cromado claro (gradiente) */
+  --usina-user: linear-gradient(135deg,#f5f7f9,#dfe6ea);
+    --usina-white: #ffffff;
+      }
+  html,body{height:100%;}
+  /* Fundo: gradiente horizontal da esquerda (azul) para a direita (laranja) com mistura no meio */
+  body{font-family: 'Syne', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial; background: linear-gradient(90deg, var(--usina-blue) 0%, #74563A 50%, var(--usina-orange) 100%);} 
+
+      /* typing dots */
+      .typing-dots{
+        display:inline-flex; align-items:center; justify-content:center;
+      }
+      .typing-dots span {
+        display: inline-block;
+        width: 6px;
+        height: 6px;
+        margin: 0 3px;
+        background: rgba(10,71,116,0.9);
+        border-radius: 50%;
+        opacity: 0.9;
+        transform: translateY(0);
+        animation: bounce 0.9s infinite ease-in-out;
+      }
+      .typing-dots span:nth-child(2) { animation-delay: 0.12s; }
+      .typing-dots span:nth-child(3) { animation-delay: 0.24s; }
+      @keyframes bounce {
+        0%, 80%, 100% { transform: translateY(0); opacity: 0.6; }
+        40% { transform: translateY(-6px); opacity: 1; }
+      }
+
+      /* custom scroll */
+  /* mensagens: garantir overflow e rolagem suave em mobile/desktop; em telas pequenas deixar sem max-height para o container crescer naturalmente */
+      .messages { scrollbar-width: thin; overflow-y: auto; -webkit-overflow-scrolling: touch; min-height: 0; }
+  .messages::-webkit-scrollbar { width: 10px; }
+  .messages::-webkit-scrollbar-thumb { background: rgba(10,71,116,0.22); border-radius: 10px; }
+
+  /* agentes container: permitir overflow visível para que efeitos (scale/ring) não sejam cortados */
+  #agents { align-items: start; overflow: visible; }
+
+  /* centralizar o painel esquerdo quando a classe .left-centered for aplicada no grid
+     aplica-se a todas as larguras; o painel terá largura máxima controlada para
+     manter boa legibilidade em mobile/tablet/desktop. Também centraliza verticalmente
+     usando min-height e alinhamento do grid para garantir o card no centro da viewport. */
+  .left-centered {
+    grid-template-columns: 1fr !important;
+    justify-items: center;
+    align-items: center;       /* alinha o item no centro da célula (vertical) */
+    align-content: center;     /* centraliza o conteúdo do grid quando há espaço */
+    min-height: calc(100vh - 96px); /* considera o padding-top usado para navbar */
+  }
+  .left-centered > #leftPanel { width: min(760px, 96%); }
+  /* animações leves e performáticas: animar transform + opacity (melhor que width/padding) */
+  .left-panel { transition: transform 480ms cubic-bezier(.2,.9,.2,1), opacity 320ms ease; transform-origin: left center; }
+  .left-panel.collapsing { transform: translateX(-8%) scale(.995); opacity: 0; pointer-events: none; }
+  .right-panel { transition: transform 480ms cubic-bezier(.2,.9,.2,1), opacity 320ms ease; transform-origin: center; }
+  .right-panel.right-expanding { transform: scale(1.01); opacity: 1; }
+  .animating-grid { isolation: isolate; }
+  /* animações leves e performáticas: animar transform + opacity (melhor que width/padding) */
+  .left-panel { transition: transform 480ms cubic-bezier(.2,.9,.2,1), opacity 320ms ease; transform-origin: left center; }
+  .left-panel.collapsing { transform: translateX(-8%) scale(.995); opacity: 0; pointer-events: none; }
+  .right-panel { transition: transform 480ms cubic-bezier(.2,.9,.2,1), opacity 320ms ease; transform-origin: center; }
+  .right-panel.right-expanding { transform: scale(1.01); opacity: 1; }
+  .animating-grid { isolation: isolate; }
+  /* quando o chat for o único painel visível, centralizá-lo igualmente
+     em todas as larguras; limitar largura para manter legibilidade */
+  .single-centered {
+    grid-template-columns: 1fr !important;
+    justify-items: center;
+    align-items: center;
+    align-content: center;
+    min-height: calc(100vh - 96px);
+  }
+  .single-centered > #rightPanel { width: min(980px, 96%); }
+  /* quando o chat for o único painel, garantir altura confortável em todas as telas */
+  .single-centered > #rightPanel {
+    display: flex;
+    flex-direction: column;
+    min-height: 64vh; /* padrão para mobile/tablet */
+    max-height: 86vh;
+  }
+  @media (min-width: 768px) {
+    .single-centered > #rightPanel { min-height: 70vh; }
+  }
+  @media (min-width: 1024px) {
+    .single-centered > #rightPanel { min-height: 78vh; }
+  }
+
+  /* agente card: reduzir tamanho visual (menor padding/min-height), mantendo estilo
+    Permitir que o texto quebre em múltiplas linhas para garantir visibilidade completa */
+  .agent-card { padding: 0.9rem 1rem; min-height: 64px; font-size: 0.95rem; align-items: flex-start; display:flex; position:relative; z-index:0; }
+  /* quando scaled (Tailwind utility 'scale-105' is added), bring to front so shadow/ring not clipped */
+  .agent-card.scale-105 { z-index: 20; }
+  /* permitir quebra e múltiplas linhas; garantir que o label possa encolher dentro do flex */
+  .agent-card .breakable { min-width: 0; overflow: visible; text-overflow: clip; white-space: normal; display: block; font-size: clamp(0.82rem, 0.9vw, 1rem); line-height: 1.15; }
+
+  /* altura fixa dos painéis somente em telas grandes (desktop) */
+  @media (min-width: 1024px) {
+    .chat-panel{ height:78vh; max-height:86vh; min-height:520px; }
+    .panel-equal{ height:78vh; max-height:86vh; min-height:520px; }
+    .messages { max-height: calc(78vh - 180px); }
+  /* tornar os agent-cards um pouco maiores em telas grandes (sutil) */
+  .agent-card { padding: 1rem 1.1rem; min-height: 72px; }
+  .agent-card .breakable { font-size: clamp(0.95rem, 0.9vw, 1.08rem); }
+  }
+  /* em tablets e menores, permita que os painéis cresçam de acordo com o conteúdo */
+  /* small screens: up to 767px -> 2 columns */
+  @media (max-width: 767px) {
+  /* em mobile: aumentar a altura do chat para conversa mais confortável */
+  .chat-panel { height: auto; max-height: none; min-height: 65vh; }
+  .panel-equal { height: auto; max-height: none; min-height: 0; }
+  /* garantir que todos os agent-cards tenham a mesma altura e conteúdo centralizado */
+  .agent-card { min-height: 64px; align-items: center; }
+    #agents { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+
+  /* medium screens (tablets): 768px - 1023px -> 3 columns */
+  @media (min-width: 768px) and (max-width: 1023px) {
+  /* reduzir ainda mais a altura do painel esquerdo e compactar os agent-cards */
+  /* em tablets: chat com altura confortável (maior que mobile), painel esquerdo flexível */
+  .panel-equal { height: auto; max-height: none; min-height: 0; }
+  .chat-panel { height: auto; max-height: none; min-height: 70vh; }
+  .agent-card { min-height: 56px; }
+    #agents { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  /* reduzir padding-bottom do painel esquerdo para diminuir o espaço abaixo do botão */
+  .panel-equal { padding-bottom: 0.75rem; }
+  /* diminuir espaço entre os agentes e o botão especificamente no painel esquerdo */
+  .panel-equal > .mt-6 { margin-top: 0.75rem; }
+  }
+  @media (max-width: 420px) {
+    .agent-card .breakable { white-space: normal; }
+  }
+
+      /* message bubble shadows */
+      .bubble-agent{ background: linear-gradient(180deg, rgba(10,71,116,0.06), rgba(10,71,116,0.03)); border: 1px solid rgba(10,71,116,0.06); }
+      .bubble-user{ background: linear-gradient(180deg, rgba(221,100,0,0.12), rgba(221,100,0,0.08)); border: 1px solid rgba(221,100,0,0.08); }
+
+  /* small utilities */
+  /* avatares agora são círculos completos e centrados; terão ícone SVG interno */
+  .avatar{ width:36px; height:36px; border-radius:9999px; display:inline-flex; align-items:center; justify-content:center; font-weight:700; box-shadow: 0 2px 6px rgba(2,6,23,0.06); }
+  /* painel do chat com tamanho fixo para habilitar scroll interno nas mensagens */
+  /* painel do chat: por padrão deixar crescer com o conteúdo; em desktop aplicamos altura fixa */
+  .chat-panel{ display:flex; flex-direction:column; height:auto; max-height:none; min-height:64vh; }
+  .panel-equal { min-height: 0; }
+  @media (min-width: 768px) {
+    .chat-panel { min-height: 70vh; }
+  }
+  @media (min-width: 1024px) {
+    .chat-panel { min-height: 78vh; }
+  }
+  /* garantir que a área do chat (conteúdo interno) permita encolher e que as mensagens rolem corretamente */
+  #chatArea { min-height: 0; display: flex; flex-direction: column; flex: 1 1 auto; }
+  #messages { flex: 1 1 auto; min-height: 0; }
+  /* painel lateral: por padrão cresce com o conteúdo; altura igual apenas em desktop */
+  .panel-equal{ display:flex; flex-direction:column; height:auto; max-height:none; min-height:0; }
+  /* quando o painel direito ocupar toda a largura, ajustar espaçamentos internos para se manter legível */
+  #rightPanel.col-span-1, #rightPanel.lg\:col-span-3 { padding-left: 1rem; padding-right: 1rem; }
+  @media (min-width: 1024px) {
+    #rightPanel.lg\:col-span-3 { max-width: 100%; }
+  }
+    </style>
+  </head>
+  <body class="min-h-screen antialiased text-sm">
+    <!-- Navbar (full width) -->
+    <nav class="fixed top-0 left-0 right-0 z-30">
+      <div style="background: var(--usina-blue); box-shadow: 0 6px 20px rgba(10,71,116,0.22); width:100%;">
+        <div class="max-w-6xl mx-auto flex items-center h-14 px-6">
+          <div class="flex-1"></div>
+          <div class="absolute left-1/2 transform -translate-x-1/2 text-center">
+            <span class="text-white font-semibold text-xl">Hackathon Usina Edu</span>
+          </div>
+        </div>
+      </div>
+    </nav>
+
+  <div class="min-h-screen flex items-center justify-center p-8 pt-24">
+  <div id="appGrid" class="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-3 gap-6">
+  <!-- Left panel: intro + agents -->
+  <div id="leftPanel" class="lg:col-span-1 bg-white/70 backdrop-blur-sm rounded-2xl p-8 shadow-sm border border-gray-50 panel-equal">
+          <div class="flex items-center gap-3">
+            <div class="w-full text-center">
+              <h2 class="text-2xl font-semibold text-[#0a4774]">Usina Edu</h2>
+              <p class="text-sm text-gray-500 mt-1">Escolha um agente e inicie sua conversa</p>
+            </div>
+          </div>
+
+          <div class="mt-6">
+            <label class="block text-base font-medium text-gray-600 mb-2">Seu nome</label>
+            <input id="userName" class="w-full border border-gray-100 rounded-lg px-3 py-2 shadow-sm focus:outline-none focus:ring-2 focus:ring-[#0a4774]" placeholder="Digite seu nome" />
+          </div>
+
+          <div class="mt-5">
+            <p class="text-base text-gray-600 mb-3">Agentes</p>
+            <div id="agents" class="grid grid-cols-2 gap-3">
+              <!-- agent buttons injected by JS -->
+            </div>
+          </div>
+
+          <div class="mt-6">
+            <button id="startBtn" disabled class="w-full flex items-center justify-center gap-3 bg-[#0a4774] text-white px-5 py-3 rounded-xl text-base font-semibold shadow-sm opacity-60 cursor-not-allowed">Iniciar chat</button>
+          </div>      
+    </div>
+
+        <!-- Right panel: chat area (span 2 cols) -->
+  <div id="rightPanel" class="hidden lg:col-span-2 bg-white/80 backdrop-blur-sm rounded-2xl p-4 shadow-md border border-gray-50 flex flex-col chat-panel">
+          <div class="flex items-center justify-between px-4 py-2 border-b border-gray-100">
+            <div class="flex items-center gap-3">
+              <div id="chatAvatar" class="w-10 h-10 rounded-full bg-[#0a4774] flex items-center justify-center text-white shadow-sm" aria-hidden="true">
+                <!-- ícone de chat branco (aparece enquanto nenhum agente é selecionado) - usa versão menor para combinar com os avatares nas mensagens -->
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10z" stroke="#ffffff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </div>
+              <div>
+                <div id="chatTitle" class="text-base font-semibold text-[#0a4774]">Conversa</div>
+                <div class="text-small text-gray-400">Agente: <span id="selectedAgent">Nenhum</span></div>
+              </div>
+            </div>
+          </div>
+
+          <div id="chatArea" class="hidden flex-1 flex flex-col">
+            <div id="messages" class="messages flex-1 overflow-auto p-6 space-y-4">
+              <!-- messages -->
+            </div>
+
+            <div class="px-6 py-4 border-t border-gray-100 flex items-center gap-3">
+              <textarea id="input" rows="1" placeholder="Escreva sua mensagem..." class="flex-1 resize-none border border-gray-100 rounded-xl px-4 py-3 shadow-sm focus:outline-none focus:ring-2 focus:ring-[#0a4774]"></textarea>
+              <button id="sendBtn" class="bg-[#dd6400] text-white px-5 py-2 rounded-xl shadow-sm">Enviar</button>
+            </div>
+          </div>
+
+          <!-- Placeholder area when chat not started -->
+          <div id="welcomePlaceholder" class="flex-1 flex flex-col items-center justify-center text-center text-gray-500 px-6">
+            <h3 class="mb-3 text-2xl md:text-3xl font-bold text-[#0a4774]">Bem-vindo ao chat</h3>
+            <p class="max-w-xs md:max-w-md text-base md:text-lg">Preencha seu nome e escolha um agente para começar.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // Config
+      const AGENTS = [
+        "Agente do Problema",
+        "Agente do Conhecimento",
+        "Agente da Instrução",
+        "Agente da Simulação",
+        "Agente da Apresentação",
+        "Agente da Orquestração"
+      ];
+      // Webhook n8n fornecido (já configurado)
+      const WEBHOOK_URL = "https://webhook.aidorea.com/webhook/eddaa88d-2df3-4f86-ba92-c08e12499160"; // substitua se necessário
+
+  // Elements
+  const agentsEl = document.getElementById('agents');
+  const startBtn = document.getElementById('startBtn');
+  const userNameInput = document.getElementById('userName');
+  const chatArea = document.getElementById('chatArea');
+  const welcomePlaceholder = document.getElementById('welcomePlaceholder');
+  const messagesEl = document.getElementById('messages');
+  const inputEl = document.getElementById('input');
+  const sendBtn = document.getElementById('sendBtn');
+  const selectedAgentEl = document.getElementById('selectedAgent');
+  const chatAvatar = document.getElementById('chatAvatar');
+
+      let selectedAgent = null;
+      let userName = '';
+
+      // Render agent buttons
+      // Distinct gradients that still reference the Usina palette
+      const AGENT_COLORS = [
+        'linear-gradient(135deg,#0a4774,#1f6b9a)',      // deep blue -> teal
+        'linear-gradient(135deg,#0aa3a8,#3aa0c9)',      // teal -> cyan
+        'linear-gradient(135deg,#dd6400,#ff8a3d)',      // orange -> light orange
+        'linear-gradient(135deg,#10b981,#059669)',      // simulation -> green distinct
+        'linear-gradient(135deg,#6aa0c0,#0a4774)',      // light blue -> deep blue
+        'linear-gradient(135deg,#d97706,#b45309)'       // warm orange -> darker
+      ];
+
+      AGENTS.forEach((a, idx) => {
+        const card = document.createElement('button');
+        card.type = 'button';
+        // usar o gradiente como fundo do card
+        // adiciona .agent-card para garantir min-height/padding consistente
+        card.className = 'flex items-center gap-3 agent-card rounded-lg shadow-sm hover:shadow-md transition w-full text-left';
+        card.style.background = AGENT_COLORS[idx % AGENT_COLORS.length];
+        card.style.color = 'white';
+        card.style.border = '1px solid rgba(255,255,255,0.06)';
+
+
+  const label = document.createElement('div');
+  label.className = 'text-sm md:text-base font-semibold breakable';
+  label.style.flex = '1 1 auto';
+  label.style.minWidth = '0';
+  label.style.textAlign = 'center';
+  label.style.color = 'white';
+  label.innerText = a;
+
+  card.appendChild(label);
+
+        card.addEventListener('click', () => {
+          // quando o usuário selecionar um agente, travamos a seleção (só recarregando a página poderá mudar)
+          document.querySelectorAll('#agents button').forEach(b => b.classList.remove('ring-2','ring-white','scale-105'));
+          card.classList.add('ring-2','ring-white','scale-105');
+          selectedAgent = a;
+          selectedAgentEl.innerText = a;
+          // atualizar avatar do cabeçalho para o gradiente do agente
+          const idx = AGENTS.indexOf(a);
+          if (idx >= 0 && chatAvatar) {
+            // aplicar gradiente e manter o ícone de conversa (traçado branco) por cima
+            chatAvatar.style.background = AGENT_COLORS[idx % AGENT_COLORS.length];
+            chatAvatar.style.color = 'white';
+            chatAvatar.innerHTML = `
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10z" stroke="#ffffff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            `;
+          }
+          updateStartState();
+          // desabilitar todos os botões de agente para impedir troca sem reload
+          document.querySelectorAll('#agents button').forEach(b => {
+            b.disabled = true;
+            b.style.pointerEvents = 'none';
+            b.style.opacity = '0.95';
+            b.style.filter = 'grayscale(0)';
+          });
+        });
+        agentsEl.appendChild(card);
+      });
+
+      userNameInput.addEventListener('input', () => {
+        userName = userNameInput.value.trim();
+        updateStartState();
+      });
+
+      function updateStartState() {
+        if (userName && selectedAgent) {
+          startBtn.disabled = false;
+          startBtn.classList.remove('opacity-60','cursor-not-allowed');
+        } else {
+          startBtn.disabled = true;
+          startBtn.classList.add('opacity-60','cursor-not-allowed');
+        }
+      }
+
+      startBtn.addEventListener('click', () => {
+        // proteger múltiplos cliques
+        startBtn.disabled = true;
+        // garantir que um nome e agente foram selecionados
+        if (!userName || !selectedAgent) return;
+
+        // mostrar painel direito (chat) e esconder o painel esquerdo
+        const left = document.getElementById('leftPanel');
+        const right = document.getElementById('rightPanel');
+        const grid = document.getElementById('appGrid');
+
+        // revelar o painel direito e o conteúdo do chat
+        right.classList.remove('hidden');
+        chatArea.classList.remove('hidden');
+        welcomePlaceholder.classList.add('hidden');
+        document.getElementById('selectedAgent').innerText = selectedAgent;
+
+        // remover centralização do painel esquerdo (se aplicada)
+        if (grid && grid.classList.contains('left-centered')) {
+          grid.classList.remove('left-centered');
+        }
+
+        // animação suave: colapsar o left panel via classes e expandir o right panel
+        if (left) {
+          // ensure the panels have the animation classes
+          left.classList.add('left-panel');
+          right.classList.add('right-panel');
+          // trigger collapsing animation
+          requestAnimationFrame(() => left.classList.add('collapsing'));
+          // also add a subtle expand class to right for visual continuity
+          right.classList.add('right-expanding');
+
+          const onTransitionEnd = (e) => {
+            if (e.target !== left) return;
+            // only act when the left finishes its transform/opacity transition
+            if (e.propertyName && (e.propertyName.includes('transform') || e.propertyName.includes('opacity'))) {
+              left.removeEventListener('transitionend', onTransitionEnd);
+              // finalize: remove left from DOM and adjust grid
+              if (left.parentElement) left.remove();
+              if (grid) {
+                grid.classList.remove('lg:grid-cols-3');
+                grid.classList.add('grid-cols-1');
+              }
+              right.classList.remove('lg:col-span-2');
+              right.classList.add('lg:col-span-3','col-span-1');
+              if (grid) grid.classList.add('single-centered');
+              // cleanup
+              right.classList.remove('right-expanding');
+            }
+          };
+          left.addEventListener('transitionend', onTransitionEnd);
+          // fallback: if transitionend doesn't fire, force after 640ms
+          setTimeout(() => {
+            if (left && left.parentElement) {
+              if (left.parentElement) left.remove();
+              if (grid) {
+                grid.classList.remove('lg:grid-cols-3');
+                grid.classList.add('grid-cols-1');
+              }
+              right.classList.remove('lg:col-span-2');
+              right.classList.add('lg:col-span-3','col-span-1');
+              if (grid) grid.classList.add('single-centered');
+              right.classList.remove('right-expanding');
+            }
+          }, 640);
+        }
+
+        // welcome message
+        addAgentMessage(`Olá ${userName}! Você está conversando com o ${selectedAgent}. Em que posso ajudar hoje?`);
+      });
+
+      sendBtn.addEventListener('click', sendMessage);
+      inputEl.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          sendMessage();
+        }
+      });
+
+      function appendMessage({from='agent', text}) {
+        const row = document.createElement('div');
+        row.className = 'flex items-start gap-3';
+        if (from === 'user') row.classList.add('justify-end');
+        else row.classList.add('justify-start');
+
+        const avatar = document.createElement('div');
+        avatar.className = 'avatar';
+        // ícone de chat (usa currentColor para herdar a cor definida no avatar)
+        const chatIcon = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10z" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+
+        if (from === 'user') {
+          // aplicar o gradiente cromado definido em --usina-user (lido do :root) e usar um traço cinza-azulado para o ícone
+          const userBg = getComputedStyle(document.documentElement).getPropertyValue('--usina-user').trim() || 'linear-gradient(135deg,#f5f7f9,#dfe6ea)';
+          avatar.style.background = userBg;
+          // cor do ícone (não muito escura)
+          avatar.style.color = '#475569';
+          avatar.innerHTML = chatIcon;
+        } else {
+          // usar o gradiente do agente selecionado para o avatar das mensagens
+          const idx = AGENTS.indexOf(selectedAgent);
+          if (idx >= 0) {
+            avatar.style.background = AGENT_COLORS[idx % AGENT_COLORS.length];
+            avatar.style.color = 'white';
+          } else {
+            avatar.style.background = 'var(--usina-blue)';
+            avatar.style.color = 'white';
+          }
+          avatar.innerHTML = chatIcon;
+        }
+
+        const bubble = document.createElement('div');
+        bubble.className = 'p-3 rounded-xl max-w-[75%] text-sm';
+        if (from === 'user') { bubble.classList.add('bubble-user'); bubble.style.color = '#3b2b1b'; }
+        else { bubble.classList.add('bubble-agent'); bubble.style.color = '#04293a'; }
+        bubble.innerText = text;
+
+        if (from === 'user') {
+          row.appendChild(bubble);
+          row.appendChild(avatar);
+        } else {
+          row.appendChild(avatar);
+          row.appendChild(bubble);
+        }
+
+        messagesEl.appendChild(row);
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+      }
+
+      function addAgentMessage(text) {
+        appendMessage({from: 'agent', text});
+      }
+      function addUserMessage(text) {
+        appendMessage({from: 'user', text});
+      }
+
+      function showTyping() {
+        const el = document.createElement('div');
+        el.id = 'typingIndicator';
+        el.className = 'flex justify-start';
+        // Apenas os três pontinhos, sem fundo/bolha
+        const dots = document.createElement('div');
+        dots.className = 'typing-dots';
+        dots.innerHTML = '<span></span><span></span><span></span>';
+        el.appendChild(dots);
+        messagesEl.appendChild(el);
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+      }
+
+      function hideTyping() {
+        const el = document.getElementById('typingIndicator');
+        if (el) el.remove();
+      }
+
+      async function sendMessage() {
+        const text = inputEl.value.trim();
+        if (!text) return;
+        addUserMessage(text);
+        inputEl.value = '';
+
+        showTyping();
+
+        const payload = {
+          user: userName,
+          agent: selectedAgent,
+          message: text,
+          timestamp: new Date().toISOString()
+        };
+
+        try {
+          let replyText = '';
+          if (WEBHOOK_URL) {
+            // send to n8n webhook
+            const res = await fetch(WEBHOOK_URL, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+            });
+            if (!res.ok) throw new Error('Resposta do webhook: ' + res.status);
+            const data = await res.json();
+            // espera-se que o fluxo n8n retorne { reply: "texto" } ou { replies: [...] }
+            // Prefer common text fields. Support:
+            // - { reply: "..." }
+            // - { replies: ["...", ...] }
+            // - { output: "..." } (ex.: seu exemplo do n8n)
+            // - n8n style array [ { json: { output: "..." } } ]
+            if (data.reply) replyText = data.reply;
+            else if (Array.isArray(data.replies)) replyText = data.replies.join("\n");
+            else if (typeof data.output === 'string') replyText = data.output;
+            else if (Array.isArray(data) && data[0] && data[0].json) {
+              // try common nested shapes from n8n
+              const maybe = data[0].json;
+              if (typeof maybe.output === 'string') replyText = maybe.output;
+              else if (typeof maybe.reply === 'string') replyText = maybe.reply;
+              else if (Array.isArray(maybe.replies)) replyText = maybe.replies.join("\n");
+              else replyText = JSON.stringify(data);
+            } else {
+              // fallback: if it's a string, use it; otherwise stringify
+              replyText = typeof data === 'string' ? data : JSON.stringify(data);
+            }
+          } else {
+            // simulação local (demo)
+            await new Promise(r => setTimeout(r, 900));
+            replyText = `[Simulado by ${selectedAgent}] Recebi: "${text}"`;
+          }
+
+          hideTyping();
+          addAgentMessage(replyText);
+        } catch (err) {
+          hideTyping();
+          addAgentMessage('Erro ao chamar o webhook: ' + (err.message || err));
+        }
+      }
+      
+
+      // --- Center panels appropriately depending on which panels are visible ---
+      function applyPanelCentering() {
+        const grid = document.getElementById('appGrid');
+        const left = document.getElementById('leftPanel');
+        const right = document.getElementById('rightPanel');
+        if (!grid || !right) return;
+        // clear both classes first
+        grid.classList.remove('left-centered','single-centered');
+        // if left exists and right is hidden -> center left
+        if (left && right.classList.contains('hidden')) {
+          grid.classList.add('left-centered');
+          return;
+        }
+        // if left removed (or not present) and right is visible -> center the chat
+        if ((!left || left.parentElement == null) && !right.classList.contains('hidden')) {
+          grid.classList.add('single-centered');
+          return;
+        }
+      }
+
+      // initial check and on resize
+      applyPanelCentering();
+      window.addEventListener('resize', applyPanelCentering);
+    </script>
+  </body>
+</html>
