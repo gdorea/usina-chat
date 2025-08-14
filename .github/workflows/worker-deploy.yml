@@ -18,16 +18,12 @@ jobs:
       - name: Install Wrangler
         run: npm install -g wrangler
 
-      - name: Authenticate Wrangler
+      - name: Publish worker (using CLOUDFLARE_API_TOKEN)
         env:
-          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
-        run: |
-          echo "${{ secrets.CF_API_TOKEN }}" | wrangler login --api-token
-
-      - name: Publish worker
-        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
           WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
         run: |
-          # ensure the secret is present in Worker namespace
+          # Inject the webhook secret into the Worker (non-interactive)
           printf "%s" "$WEBHOOK_URL" | wrangler secret put WEBHOOK_URL || true
+          # Publish the worker using the provided token
           wrangler publish worker
