@@ -21,9 +21,10 @@ jobs:
       - name: Publish worker (using CLOUDFLARE_API_TOKEN)
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          WRANGLER_TOKEN: ${{ secrets.CF_API_TOKEN }}
           WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
         run: |
           # Inject the webhook secret into the Worker (non-interactive)
           printf "%s" "$WEBHOOK_URL" | wrangler secret put WEBHOOK_URL || true
-          # Publish the worker using the provided token
-          wrangler publish worker
+          # Deploy the worker using wrangler deploy (non-interactive)
+          wrangler deploy

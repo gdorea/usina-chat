@@ -177,6 +177,26 @@
   /* painel do chat: por padrão deixar crescer com o conteúdo; em desktop aplicamos altura fixa */
   .chat-panel{ display:flex; flex-direction:column; height:auto; max-height:none; min-height:64vh; }
   .panel-equal { min-height: 0; }
+                    /* Navbar title: keep on one line and scale down on very small screens */
+                    .nav-title {
+                      white-space: nowrap;
+                      display: inline-block;
+                      overflow: visible;
+                      /* allow small reduction on very narrow screens but keep readable on larger ones */
+                      font-size: clamp(1rem, 3.6vw, 1.125rem); /* ~16px - 18px */
+                      line-height: 1;
+                    }
+                    /* Input (textarea) placeholder and value: prefer single-line display on small screens
+                       increase min-height slightly so the control is easier to tap and the placeholder fits */
+                    .chat-input {
+                      min-width: 160px;
+                      min-height: 48px;
+                      white-space: nowrap;
+                      overflow: hidden;
+                      text-overflow: ellipsis;
+                    }
+                    /* ensure placeholder text doesn't wrap in browsers that support the pseudo-element */
+                    .chat-input::placeholder { white-space: nowrap; }
   @media (min-width: 768px) {
     .chat-panel { min-height: 70vh; }
   }
@@ -259,7 +279,10 @@
             </div>
 
             <div class="px-6 py-4 border-t border-gray-100 flex items-center gap-3">
-              <textarea id="input" rows="1" placeholder="Escreva sua mensagem..." class="flex-1 resize-none border border-gray-100 rounded-xl px-4 py-3 shadow-sm focus:outline-none focus:ring-2 focus:ring-[#0a4774]"></textarea>
+              <!-- Mobile: single-line input (visible on small screens) -->
+              <input id="inputMobile" type="text" placeholder="Escreva sua mensagem..." class="flex-1 block md:hidden border border-gray-100 rounded-xl px-4 py-3 shadow-sm focus:outline-none focus:ring-2 focus:ring-[#0a4774] chat-input" />
+              <!-- Desktop: multiline textarea (visible on md and up) -->
+              <textarea id="inputDesktop" rows="1" placeholder="Escreva sua mensagem..." class="flex-1 hidden md:block resize-none border border-gray-100 rounded-xl px-4 py-3 shadow-sm focus:outline-none focus:ring-2 focus:ring-[#0a4774] chat-input"></textarea>
               <button id="sendBtn" class="bg-[#dd6400] text-white px-5 py-2 rounded-xl shadow-sm">Enviar</button>
             </div>
           </div>
@@ -293,7 +316,8 @@
   const chatArea = document.getElementById('chatArea');
   const welcomePlaceholder = document.getElementById('welcomePlaceholder');
   const messagesEl = document.getElementById('messages');
-  const inputEl = document.getElementById('input');
+  const inputMobile = document.getElementById('inputMobile');
+  const inputDesktop = document.getElementById('inputDesktop');
   const sendBtn = document.getElementById('sendBtn');
   const selectedAgentEl = document.getElementById('selectedAgent');
   const chatAvatar = document.getElementById('chatAvatar');
@@ -449,13 +473,33 @@
         addAgentMessage(`Olá ${userName}! Você está conversando com o ${selectedAgent}. Em que posso ajudar hoje?`);
       });
 
+      // send button
       sendBtn.addEventListener('click', sendMessage);
-      inputEl.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
-          e.preventDefault();
-          sendMessage();
-        }
-      });
+
+      // helper to pick the visible / active input
+      function getActiveInput() {
+        // on small screens inputMobile is visible (block) and inputDesktop is hidden; vice-versa on md+
+        if (window.getComputedStyle(inputMobile).display !== 'none') return inputMobile;
+        return inputDesktop || inputMobile;
+      }
+
+      // handle Enter on mobile (single-line) and Enter/Shift+Enter on desktop
+      if (inputMobile) {
+        inputMobile.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            sendMessage();
+          }
+        });
+      }
+      if (inputDesktop) {
+        inputDesktop.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendMessage();
+          }
+        });
+      }
 
       function appendMessage({from='agent', text}) {
         const row = document.createElement('div');
@@ -532,10 +576,12 @@
       }
 
       async function sendMessage() {
-        const text = inputEl.value.trim();
+        const active = getActiveInput();
+        if (!active) return;
+        const text = (active.value || '').trim();
         if (!text) return;
         addUserMessage(text);
-        inputEl.value = '';
+        active.value = '';
 
         showTyping();
 
